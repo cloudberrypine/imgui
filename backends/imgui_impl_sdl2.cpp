@@ -351,6 +351,11 @@ bool ImGui_ImplSDL2_ProcessEvent(const SDL_Event* event)
 #ifdef __EMSCRIPTEN__
             wheel_x /= 100.0f;
 #endif
+#ifdef __APPLE__
+            // TODO: Is there a better way of handling this?
+            wheel_x /= 10.0f;
+            wheel_y /= 10.0f;
+#endif
             io.AddMouseSourceEvent(event->wheel.which == SDL_TOUCH_MOUSEID ? ImGuiMouseSource_TouchScreen : ImGuiMouseSource_Mouse);
             io.AddMouseWheelEvent(wheel_x, wheel_y);
             return true;

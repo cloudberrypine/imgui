@@ -968,6 +968,749 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
     }
 }
 
+// We avoid using the ImVec2 math operators here to reduce cost to a minimum for debug/non-inlined builds.
+void ImDrawList::AddPolylineImproved(const ImVec2* points, const int points_count, ImU32 col, bool closed, float thickness, ImU32 transparencyMask)
+{
+    if (points_count < 2)
+        return;
+
+    const ImVec2 opaque_uv = _Data->TexUvWhitePixel;
+    // Anti-aliased stroke
+    const float AA_SIZE = _FringeScale;
+    const ImU32 col_trans = col & transparencyMask;
+
+    const float half_thickness = thickness / 2.0f;
+
+#define IM_LINE_VERTICES_PER_ROW 4
+#define IM_LINE_INDICES_PER_SEGMENT 18
+
+    const int vtx_count = IM_LINE_VERTICES_PER_ROW * (points_count + 2);
+    const int idx_count = IM_LINE_INDICES_PER_SEGMENT * (points_count + 1);
+
+    PrimReserve(idx_count, vtx_count);
+
+    const ImVec2 &p1 = points[1];
+    const ImVec2 &p0 = points[0];
+
+    float currForwardX = p1.x - p0.x;
+    float currForwardY = p1.y - p0.y;
+    IM_NORMALIZE2F_OVER_ZERO(currForwardX, currForwardY);
+
+    // Rotate forward -90 degrees
+    float currRightX = currForwardY;
+    float currRightY = -currForwardX;
+
+    float currAmpFactor = 1.0f;
+
+    float startCenterX = p0.x - currForwardX * AA_SIZE;
+    float startCenterY = p0.y - currForwardY * AA_SIZE;
+
+    const float edgeRowSideOffset = half_thickness;
+    const float edgeRowSideOffsetAA = edgeRowSideOffset + AA_SIZE;
+
+    // // Add anti-aliased start row
+    _VtxWritePtr[0].pos.x = startCenterX - currRightX * edgeRowSideOffsetAA;
+    _VtxWritePtr[0].pos.y = startCenterY - currRightY * edgeRowSideOffsetAA;
+    _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+    _VtxWritePtr[1].pos.x = startCenterX - currRightX * edgeRowSideOffset;
+    _VtxWritePtr[1].pos.y = startCenterY - currRightY * edgeRowSideOffset;
+    _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans;
+    _VtxWritePtr[2].pos.x = startCenterX + currRightX * edgeRowSideOffset;
+    _VtxWritePtr[2].pos.y = startCenterY + currRightY * edgeRowSideOffset;
+    _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans;
+    _VtxWritePtr[3].pos.x = startCenterX + currRightX * edgeRowSideOffsetAA;
+    _VtxWritePtr[3].pos.y = startCenterY + currRightY * edgeRowSideOffsetAA;
+    _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+    _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+
+    const ImVec2 *currPoint = points;
+    // Add line segment rows
+    for (int i = 0; i < points_count - 2; i++)
+    {
+        // Row for current point
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = half_thickness * currAmpFactor;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+        // Prepare data for the next vertex
+        const ImVec2 &pI2 = points[i + 2];
+        const ImVec2 &pI1 = points[i + 1];
+
+        float nextForwardX = pI2.x - pI1.x;
+        float nextForwardY = pI2.y - pI1.y;
+        IM_NORMALIZE2F_OVER_ZERO(nextForwardX, nextForwardY);
+
+        float forwardDotProduct = currForwardX * nextForwardX + currForwardY * nextForwardY;
+        currAmpFactor = 1.4142135624f - 0.4142135624f * forwardDotProduct;
+        currRightX = currForwardY + nextForwardY;
+        currRightY = -currForwardX - nextForwardX;
+        IM_NORMALIZE2F_OVER_ZERO(currRightX, currRightY);
+        currForwardX = nextForwardX;
+        currForwardY = nextForwardY;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+        currPoint++;
+    }
+
+    // Second to last point: nextForward = currForward, which means no need to normalize anything
+    {
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = half_thickness * currAmpFactor;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+        // Prepare data for the next vertex
+        currRightX = currForwardY;
+        currRightY = -currForwardX;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+        currPoint++;
+    }
+
+    // Last point: no need to prepare data for the next vertex
+    {
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = half_thickness;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+    }
+
+    // Add anti-aliased end row
+    {
+        const ImVec2 &lastP = *currPoint;
+        float endCenterX = lastP.x + currForwardX * AA_SIZE;
+        float endCenterY = lastP.y + currForwardY * AA_SIZE;
+
+        _VtxWritePtr[0].pos.x = endCenterX - currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].pos.y = endCenterY - currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = endCenterX - currRightX * edgeRowSideOffset;
+        _VtxWritePtr[1].pos.y = endCenterY - currRightY * edgeRowSideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans;
+        _VtxWritePtr[2].pos.x = endCenterX + currRightX * edgeRowSideOffset;
+        _VtxWritePtr[2].pos.y = endCenterY + currRightY * edgeRowSideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans;
+        _VtxWritePtr[3].pos.x = endCenterX + currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].pos.y = endCenterY + currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+    }
+
+    // Connect the rows with triangles
+
+    // Create triangles by indexing into the vertex and color arrays
+    // We want different winding order for the anti-aliased start row so it's separated out.
+    const int currVertexI = _VtxCurrentIdx;
+    const int nextVertexI = _VtxCurrentIdx + 4;
+    // Quad 1 (edge to the right) Triangle 1
+    _IdxWritePtr[0] = currVertexI; _IdxWritePtr[1] = currVertexI + 1; _IdxWritePtr[2] = nextVertexI + 1;
+    // Quad 1 (edge to the right) Triangle 2
+    _IdxWritePtr[3] = nextVertexI; _IdxWritePtr[4] = currVertexI; _IdxWritePtr[5] = nextVertexI + 1;
+    // Quad 2 (center) Triangle 3
+    _IdxWritePtr[6] = currVertexI + 1; _IdxWritePtr[7] = currVertexI + 2; _IdxWritePtr[8] = nextVertexI + 1;
+    // Quad 2 (center) Triangle 4
+    _IdxWritePtr[9] = nextVertexI + 2; _IdxWritePtr[10] = nextVertexI + 1; _IdxWritePtr[11] = currVertexI + 2;
+    // Quad 3 (edge to the left) Triangle 5
+    _IdxWritePtr[12] = currVertexI + 2; _IdxWritePtr[13] = currVertexI + 3; _IdxWritePtr[14] = nextVertexI + 2;
+    // Quad 3 (edge to the left) Triangle 6
+    _IdxWritePtr[15] = nextVertexI + 2; _IdxWritePtr[16] = currVertexI + 3; _IdxWritePtr[17] = nextVertexI + 3;
+    // Progress to next segment
+    _IdxWritePtr += IM_LINE_INDICES_PER_SEGMENT;
+    _VtxCurrentIdx += 4;
+
+    for (int i = 0; i < points_count; i++)
+    {
+        const int currVertexI = _VtxCurrentIdx;
+        const int nextVertexI = _VtxCurrentIdx + 4;
+        // Quad 1 (edge to the right) Triangle 1
+        _IdxWritePtr[0] = currVertexI; _IdxWritePtr[1] = currVertexI + 1; _IdxWritePtr[2] = nextVertexI;
+        // Quad 1 (edge to the right) Triangle 2
+        _IdxWritePtr[3] = nextVertexI; _IdxWritePtr[4] = currVertexI + 1; _IdxWritePtr[5] = nextVertexI + 1;
+        // Quad 2 (center) Triangle 3
+        _IdxWritePtr[6] = currVertexI + 1; _IdxWritePtr[7] = currVertexI + 2; _IdxWritePtr[8] = nextVertexI + 1;
+        // Quad 2 (center) Triangle 4
+        _IdxWritePtr[9] = nextVertexI + 2; _IdxWritePtr[10] = nextVertexI + 1; _IdxWritePtr[11] = currVertexI + 2;
+        // Quad 3 (edge to the left) Triangle 5
+        _IdxWritePtr[12] = currVertexI + 2; _IdxWritePtr[13] = currVertexI + 3; _IdxWritePtr[14] = nextVertexI + 2;
+        // Quad 3 (edge to the left) Triangle 6
+        _IdxWritePtr[15] = nextVertexI + 2; _IdxWritePtr[16] = currVertexI + 3; _IdxWritePtr[17] = nextVertexI + 3;
+        // Progress to next segment
+        _IdxWritePtr += IM_LINE_INDICES_PER_SEGMENT;
+        _VtxCurrentIdx += 4;
+    }
+    // We want different winding order for the anti-aliased end row so let's adjust it here.
+    // Note that we don't use the same technique for the anti-aliased start row since that
+    // would mean loading memory potentially far away from what we have in the memory cache.
+    *(_IdxWritePtr - 4) = *(_IdxWritePtr - 4) + 1;
+    *(_IdxWritePtr - 2) = *(_IdxWritePtr - 2) - 1;
+
+    // Move past the last row of vertices
+    _VtxCurrentIdx += 4;
+}
+
+// We avoid using the ImVec2 math operators here to reduce cost to a minimum for debug/non-inlined builds.
+void ImDrawList::AddPolylineImprovedMultiWidth(const ImVec2* points, const int points_count, const float *widths, const ImU32 *colors1, const ImU32 *colors2, bool closed, float thickness, ImU32 transparencyMask)
+{
+    if (points_count < 2)
+        return;
+
+    const ImVec2 opaque_uv = _Data->TexUvWhitePixel;
+    // Anti-aliased stroke
+    const float AA_SIZE = _FringeScale;
+
+
+    const ImU32 *currColor1 = colors1;
+    const ImU32 *currColor2 = colors2;
+
+    const ImU32 col_trans1 = *currColor1 & transparencyMask;
+    const ImU32 col_trans2 = *currColor2 & transparencyMask;
+
+#define IM_LINE_VERTICES_PER_ROW 4
+#define IM_LINE_INDICES_PER_SEGMENT 18
+
+    const int vtx_count = IM_LINE_VERTICES_PER_ROW * (points_count + 2);
+    const int idx_count = IM_LINE_INDICES_PER_SEGMENT * (points_count + 1);
+
+    PrimReserve(idx_count, vtx_count);
+
+    const ImVec2 &p1 = points[1];
+    const ImVec2 &p0 = points[0];
+
+    float currForwardX = p1.x - p0.x;
+    float currForwardY = p1.y - p0.y;
+    IM_NORMALIZE2F_OVER_ZERO(currForwardX, currForwardY);
+
+    const float *currWidth = widths;
+
+    // Rotate forward -90 degrees
+    float currRightX = currForwardY;
+    float currRightY = -currForwardX;
+
+    float currAmpFactor = 1.0f;
+
+    float startCenterX = p0.x - currForwardX * AA_SIZE;
+    float startCenterY = p0.y - currForwardY * AA_SIZE;
+
+    const float edgeRowSideOffset = *currWidth / 2.0f;
+    const float edgeRowSideOffsetAA = edgeRowSideOffset + AA_SIZE;
+
+    // // Add anti-aliased start row
+    _VtxWritePtr[0].pos.x = startCenterX - currRightX * edgeRowSideOffsetAA;
+    _VtxWritePtr[0].pos.y = startCenterY - currRightY * edgeRowSideOffsetAA;
+    _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans1;
+    _VtxWritePtr[1].pos.x = startCenterX - currRightX * edgeRowSideOffset;
+    _VtxWritePtr[1].pos.y = startCenterY - currRightY * edgeRowSideOffset;
+    _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans1;
+    _VtxWritePtr[2].pos.x = startCenterX + currRightX * edgeRowSideOffset;
+    _VtxWritePtr[2].pos.y = startCenterY + currRightY * edgeRowSideOffset;
+    _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans2;
+    _VtxWritePtr[3].pos.x = startCenterX + currRightX * edgeRowSideOffsetAA;
+    _VtxWritePtr[3].pos.y = startCenterY + currRightY * edgeRowSideOffsetAA;
+    _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans2;
+
+    _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+
+    const ImVec2 *currPoint = points;
+    // Add line segment rows
+    for (int i = 0; i < points_count - 2; i++)
+    {
+        // Row for current point
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = *currWidth / 2.0f * currAmpFactor;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+        const ImU32 col_trans1 = *currColor1 & transparencyMask;
+        const ImU32 col_trans2 = *currColor2 & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans1;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = *currColor1;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = *currColor2;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans2;
+
+        // Prepare data for the next vertex
+        const ImVec2 &pI2 = points[i + 2];
+        const ImVec2 &pI1 = points[i + 1];
+
+        float nextForwardX = pI2.x - pI1.x;
+        float nextForwardY = pI2.y - pI1.y;
+        IM_NORMALIZE2F_OVER_ZERO(nextForwardX, nextForwardY);
+
+        float forwardDotProduct = currForwardX * nextForwardX + currForwardY * nextForwardY;
+        currAmpFactor = 1.4142135624f - 0.4142135624f * forwardDotProduct;
+        currRightX = currForwardY + nextForwardY;
+        currRightY = -currForwardX - nextForwardX;
+        IM_NORMALIZE2F_OVER_ZERO(currRightX, currRightY);
+        currForwardX = nextForwardX;
+        currForwardY = nextForwardY;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+        currPoint++;
+        currWidth++;
+        currColor1++;
+        currColor2++;
+    }
+
+    // Second to last point: nextForward = currForward, which means no need to normalize anything
+    {
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = *currWidth / 2.0f * currAmpFactor;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+        const ImU32 col_trans1 = *currColor1 & transparencyMask;
+        const ImU32 col_trans2 = *currColor2 & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans1;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = *currColor1;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = *currColor2;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans2;
+
+        // Prepare data for the next vertex
+        currRightX = currForwardY;
+        currRightY = -currForwardX;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+        currPoint++;
+        currWidth++;
+        currColor1++;
+        currColor2++;
+    }
+
+    // Last point: no need to prepare data for the next vertex
+    {
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = *currWidth / 2.0f;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+        const ImU32 col_trans1 = *currColor1 & transparencyMask;
+        const ImU32 col_trans2 = *currColor2 & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans1;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = *currColor1;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = *currColor2;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans2;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+    }
+
+    // Add anti-aliased end row
+    {
+        const ImVec2 &lastP = *currPoint;
+        float endCenterX = lastP.x + currForwardX * AA_SIZE;
+        float endCenterY = lastP.y + currForwardY * AA_SIZE;
+        const float edgeRowSideOffset = 0;
+        const float edgeRowSideOffsetAA = edgeRowSideOffset + AA_SIZE;
+        const ImU32 col_trans1 = *currColor1 & transparencyMask;
+        const ImU32 col_trans2 = *currColor2 & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = endCenterX - currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].pos.y = endCenterY - currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans1;
+        _VtxWritePtr[1].pos.x = endCenterX - currRightX * edgeRowSideOffset;
+        _VtxWritePtr[1].pos.y = endCenterY - currRightY * edgeRowSideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans1;
+        _VtxWritePtr[2].pos.x = endCenterX + currRightX * edgeRowSideOffset;
+        _VtxWritePtr[2].pos.y = endCenterY + currRightY * edgeRowSideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans2;
+        _VtxWritePtr[3].pos.x = endCenterX + currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].pos.y = endCenterY + currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans2;
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+    }
+
+    // Connect the rows with triangles
+
+    // Create triangles by indexing into the vertex and color arrays
+    // We want different winding order for the anti-aliased start row so it's separated out.
+    const int currVertexI = _VtxCurrentIdx;
+    const int nextVertexI = _VtxCurrentIdx + 4;
+    // Quad 1 (edge to the right) Triangle 1
+    _IdxWritePtr[0] = currVertexI; _IdxWritePtr[1] = currVertexI + 1; _IdxWritePtr[2] = nextVertexI + 1;
+    // Quad 1 (edge to the right) Triangle 2
+    _IdxWritePtr[3] = nextVertexI; _IdxWritePtr[4] = currVertexI; _IdxWritePtr[5] = nextVertexI + 1;
+    // Quad 2 (center) Triangle 3
+    _IdxWritePtr[6] = currVertexI + 1; _IdxWritePtr[7] = currVertexI + 2; _IdxWritePtr[8] = nextVertexI + 1;
+    // Quad 2 (center) Triangle 4
+    _IdxWritePtr[9] = nextVertexI + 2; _IdxWritePtr[10] = nextVertexI + 1; _IdxWritePtr[11] = currVertexI + 2;
+    // Quad 3 (edge to the left) Triangle 5
+    _IdxWritePtr[12] = currVertexI + 2; _IdxWritePtr[13] = currVertexI + 3; _IdxWritePtr[14] = nextVertexI + 2;
+    // Quad 3 (edge to the left) Triangle 6
+    _IdxWritePtr[15] = nextVertexI + 2; _IdxWritePtr[16] = currVertexI + 3; _IdxWritePtr[17] = nextVertexI + 3;
+    // Progress to next segment
+    _IdxWritePtr += IM_LINE_INDICES_PER_SEGMENT;
+    _VtxCurrentIdx += 4;
+
+    for (int i = 0; i < points_count; i++)
+    {
+        const int currVertexI = _VtxCurrentIdx;
+        const int nextVertexI = _VtxCurrentIdx + 4;
+        // Quad 1 (edge to the right) Triangle 1
+        _IdxWritePtr[0] = currVertexI; _IdxWritePtr[1] = currVertexI + 1; _IdxWritePtr[2] = nextVertexI;
+        // Quad 1 (edge to the right) Triangle 2
+        _IdxWritePtr[3] = nextVertexI; _IdxWritePtr[4] = currVertexI + 1; _IdxWritePtr[5] = nextVertexI + 1;
+        // Quad 2 (center) Triangle 3
+        _IdxWritePtr[6] = currVertexI + 1; _IdxWritePtr[7] = currVertexI + 2; _IdxWritePtr[8] = nextVertexI + 1;
+        // Quad 2 (center) Triangle 4
+        _IdxWritePtr[9] = nextVertexI + 2; _IdxWritePtr[10] = nextVertexI + 1; _IdxWritePtr[11] = currVertexI + 2;
+        // Quad 3 (edge to the left) Triangle 5
+        _IdxWritePtr[12] = currVertexI + 2; _IdxWritePtr[13] = currVertexI + 3; _IdxWritePtr[14] = nextVertexI + 2;
+        // Quad 3 (edge to the left) Triangle 6
+        _IdxWritePtr[15] = nextVertexI + 2; _IdxWritePtr[16] = currVertexI + 3; _IdxWritePtr[17] = nextVertexI + 3;
+        // Progress to next segment
+        _IdxWritePtr += IM_LINE_INDICES_PER_SEGMENT;
+        _VtxCurrentIdx += 4;
+    }
+    // We want different winding order for the anti-aliased end row so let's adjust it here.
+    // Note that we don't use the same technique for the anti-aliased start row since that
+    // would mean loading memory potentially far away from what we have in the memory cache.
+    *(_IdxWritePtr - 4) = *(_IdxWritePtr - 4) + 1;
+    *(_IdxWritePtr - 2) = *(_IdxWritePtr - 2) - 1;
+
+    // Move past the last row of vertices
+    _VtxCurrentIdx += 4;
+}
+
+// We avoid using the ImVec2 math operators here to reduce cost to a minimum for debug/non-inlined builds.
+void ImDrawList::AddPolylineMultiColored(const ImVec2* points, const int points_count,
+                                         const ImU32* colors, bool closed, float thickness, ImU32 transparencyMask)
+{
+    if (points_count < 2)
+        return;
+
+    const ImVec2 opaque_uv = _Data->TexUvWhitePixel;
+    // Anti-aliased stroke
+    const float AA_SIZE = _FringeScale;
+
+    const float half_thickness = thickness / 2.0f;
+
+#define IM_LINE_VERTICES_PER_ROW 4
+#define IM_LINE_INDICES_PER_SEGMENT 18
+
+    const int vtx_count = IM_LINE_VERTICES_PER_ROW * (points_count + 2);
+    const int idx_count = IM_LINE_INDICES_PER_SEGMENT * (points_count + 1);
+
+    PrimReserve(idx_count, vtx_count);
+
+    const ImVec2 &p1 = points[1];
+    const ImVec2 &p0 = points[0];
+
+    float currForwardX = p1.x - p0.x;
+    float currForwardY = p1.y - p0.y;
+    IM_NORMALIZE2F_OVER_ZERO(currForwardX, currForwardY);
+
+    // Rotate forward -90 degrees
+    float currRightX = currForwardY;
+    float currRightY = -currForwardX;
+
+    float currAmpFactor = 1.0f;
+
+    float startCenterX = p0.x - currForwardX * AA_SIZE;
+    float startCenterY = p0.y - currForwardY * AA_SIZE;
+
+    const float edgeRowSideOffset = half_thickness;
+    const float edgeRowSideOffsetAA = edgeRowSideOffset + AA_SIZE;
+
+    const ImU32 *currColor = colors;
+
+    {
+        ImU32 col_trans = *currColor & transparencyMask;
+
+        // // Add anti-aliased start row
+        _VtxWritePtr[0].pos.x = startCenterX - currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].pos.y = startCenterY - currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = startCenterX - currRightX * edgeRowSideOffset;
+        _VtxWritePtr[1].pos.y = startCenterY - currRightY * edgeRowSideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans;
+        _VtxWritePtr[2].pos.x = startCenterX + currRightX * edgeRowSideOffset;
+        _VtxWritePtr[2].pos.y = startCenterY + currRightY * edgeRowSideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans;
+        _VtxWritePtr[3].pos.x = startCenterX + currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].pos.y = startCenterY + currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+    }
+
+    _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+
+    const ImVec2 *currPoint = points;
+    // Add line segment rows
+    for (int i = 0; i < points_count - 2; i++)
+    {
+        // Row for current point
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = half_thickness * currAmpFactor;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+
+        ImU32 col = *currColor;
+        ImU32 col_trans = col & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+        // Prepare data for the next vertex
+        const ImVec2 &pI2 = points[i + 2];
+        const ImVec2 &pI1 = points[i + 1];
+
+        float nextForwardX = pI2.x - pI1.x;
+        float nextForwardY = pI2.y - pI1.y;
+        IM_NORMALIZE2F_OVER_ZERO(nextForwardX, nextForwardY);
+
+        float forwardDotProduct = currForwardX * nextForwardX + currForwardY * nextForwardY;
+        currAmpFactor = 1.4142135624f - 0.4142135624f * forwardDotProduct;
+        currRightX = currForwardY + nextForwardY;
+        currRightY = -currForwardX - nextForwardX;
+        IM_NORMALIZE2F_OVER_ZERO(currRightX, currRightY);
+        currForwardX = nextForwardX;
+        currForwardY = nextForwardY;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+        currPoint++;
+        currColor++;
+    }
+
+    // Second to last point: nextForward = currForward, which means no need to normalize anything
+    {
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = half_thickness * currAmpFactor;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+
+        ImU32 col = *currColor;
+        ImU32 col_trans = col & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+        // Prepare data for the next vertex
+        currRightX = currForwardY;
+        currRightY = -currForwardX;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+        currPoint++;
+        currColor++;
+    }
+
+    // Last point: no need to prepare data for the next vertex
+    {
+        const ImVec2 &center = *currPoint;
+        const float sideOffset = half_thickness;
+        const float sideOffsetAA = sideOffset + AA_SIZE;
+
+        ImU32 col = *currColor;
+        ImU32 col_trans = col & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = center.x - currRightX * sideOffsetAA;
+        _VtxWritePtr[0].pos.y = center.y - currRightY * sideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = center.x - currRightX * sideOffset;
+        _VtxWritePtr[1].pos.y = center.y - currRightY * sideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+        _VtxWritePtr[2].pos.x = center.x + currRightX * sideOffset;
+        _VtxWritePtr[2].pos.y = center.y + currRightY * sideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+        _VtxWritePtr[3].pos.x = center.x + currRightX * sideOffsetAA;
+        _VtxWritePtr[3].pos.y = center.y + currRightY * sideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+    }
+
+    // Add anti-aliased end row
+    {
+        const ImVec2 &lastP = *currPoint;
+        float endCenterX = lastP.x + currForwardX * AA_SIZE;
+        float endCenterY = lastP.y + currForwardY * AA_SIZE;
+
+        ImU32 col = *currColor;
+        ImU32 col_trans = col & transparencyMask;
+
+        _VtxWritePtr[0].pos.x = endCenterX - currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].pos.y = endCenterY - currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+        _VtxWritePtr[1].pos.x = endCenterX - currRightX * edgeRowSideOffset;
+        _VtxWritePtr[1].pos.y = endCenterY - currRightY * edgeRowSideOffset;
+        _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans;
+        _VtxWritePtr[2].pos.x = endCenterX + currRightX * edgeRowSideOffset;
+        _VtxWritePtr[2].pos.y = endCenterY + currRightY * edgeRowSideOffset;
+        _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans;
+        _VtxWritePtr[3].pos.x = endCenterX + currRightX * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].pos.y = endCenterY + currRightY * edgeRowSideOffsetAA;
+        _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+        _VtxWritePtr += IM_LINE_VERTICES_PER_ROW;
+    }
+
+    // Connect the rows with triangles
+
+    // Create triangles by indexing into the vertex and color arrays
+    // We want different winding order for the anti-aliased start row so it's separated out.
+    const int currVertexI = _VtxCurrentIdx;
+    const int nextVertexI = _VtxCurrentIdx + 4;
+    // Quad 1 (edge to the right) Triangle 1
+    _IdxWritePtr[0] = currVertexI; _IdxWritePtr[1] = currVertexI + 1; _IdxWritePtr[2] = nextVertexI + 1;
+    // Quad 1 (edge to the right) Triangle 2
+    _IdxWritePtr[3] = nextVertexI; _IdxWritePtr[4] = currVertexI; _IdxWritePtr[5] = nextVertexI + 1;
+    // Quad 2 (center) Triangle 3
+    _IdxWritePtr[6] = currVertexI + 1; _IdxWritePtr[7] = currVertexI + 2; _IdxWritePtr[8] = nextVertexI + 1;
+    // Quad 2 (center) Triangle 4
+    _IdxWritePtr[9] = nextVertexI + 2; _IdxWritePtr[10] = nextVertexI + 1; _IdxWritePtr[11] = currVertexI + 2;
+    // Quad 3 (edge to the left) Triangle 5
+    _IdxWritePtr[12] = currVertexI + 2; _IdxWritePtr[13] = currVertexI + 3; _IdxWritePtr[14] = nextVertexI + 2;
+    // Quad 3 (edge to the left) Triangle 6
+    _IdxWritePtr[15] = nextVertexI + 2; _IdxWritePtr[16] = currVertexI + 3; _IdxWritePtr[17] = nextVertexI + 3;
+    // Progress to next segment
+    _IdxWritePtr += IM_LINE_INDICES_PER_SEGMENT;
+    _VtxCurrentIdx += 4;
+
+    for (int i = 0; i < points_count; i++)
+    {
+        const int currVertexI = _VtxCurrentIdx;
+        const int nextVertexI = _VtxCurrentIdx + 4;
+        // Quad 1 (edge to the right) Triangle 1
+        _IdxWritePtr[0] = currVertexI; _IdxWritePtr[1] = currVertexI + 1; _IdxWritePtr[2] = nextVertexI;
+        // Quad 1 (edge to the right) Triangle 2
+        _IdxWritePtr[3] = nextVertexI; _IdxWritePtr[4] = currVertexI + 1; _IdxWritePtr[5] = nextVertexI + 1;
+        // Quad 2 (center) Triangle 3
+        _IdxWritePtr[6] = currVertexI + 1; _IdxWritePtr[7] = currVertexI + 2; _IdxWritePtr[8] = nextVertexI + 1;
+        // Quad 2 (center) Triangle 4
+        _IdxWritePtr[9] = nextVertexI + 2; _IdxWritePtr[10] = nextVertexI + 1; _IdxWritePtr[11] = currVertexI + 2;
+        // Quad 3 (edge to the left) Triangle 5
+        _IdxWritePtr[12] = currVertexI + 2; _IdxWritePtr[13] = currVertexI + 3; _IdxWritePtr[14] = nextVertexI + 2;
+        // Quad 3 (edge to the left) Triangle 6
+        _IdxWritePtr[15] = nextVertexI + 2; _IdxWritePtr[16] = currVertexI + 3; _IdxWritePtr[17] = nextVertexI + 3;
+        // Progress to next segment
+        _IdxWritePtr += IM_LINE_INDICES_PER_SEGMENT;
+        _VtxCurrentIdx += 4;
+    }
+    // We want different winding order for the anti-aliased end row so let's adjust it here.
+    // Note that we don't use the same technique for the anti-aliased start row since that
+    // would mean loading memory potentially far away from what we have in the memory cache.
+    *(_IdxWritePtr - 4) = *(_IdxWritePtr - 4) + 1;
+    *(_IdxWritePtr - 2) = *(_IdxWritePtr - 2) - 1;
+
+    // Move past the last row of vertices
+    _VtxCurrentIdx += 4;
+}
+
+// We intentionally avoid using ImVec2 and its math operators here to reduce cost to a minimum for debug/non-inlined builds.
+void ImDrawList::AddPolyFilled(const ImVec2* points, const int points_count, ImU32 col)
+{
+    if (points_count == 0)
+    {
+        return;
+    }
+    ImVec2 minP = points[0];
+    ImVec2 maxP = minP;
+    for (int i = 0; i < points_count; i++)
+    {
+        const ImVec2 &p = points[i];
+        minP.x = ImMin(minP.x, p.x);
+        minP.y = ImMin(minP.y, p.y);
+        maxP.x = ImMax(maxP.x, p.x);
+        maxP.y = ImMax(maxP.y, p.y);
+    }
+
+    const ImVec2 uv = _Data->TexUvWhitePixel;
+    ImVec2 centerP = (minP + maxP) / 2.0f;
+    const int vtx_count = points_count + 1;
+    const int idx_count = (points_count - 1)*3;
+    PrimReserve(idx_count, vtx_count);
+
+    _VtxWritePtr[0].pos = centerP; _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
+    _VtxWritePtr++;
+    for (int i = 0; i < points_count; i++)
+    {
+        _VtxWritePtr[0].pos = points[i]; _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
+        _VtxWritePtr++;
+    }
+
+
+    for (int i = 0; i < points_count - 1; i++)
+    {
+        _IdxWritePtr[0] = (ImDrawIdx)(_VtxCurrentIdx); _IdxWritePtr[1] = (ImDrawIdx)(_VtxCurrentIdx + i + 1); _IdxWritePtr[2] = (ImDrawIdx)(_VtxCurrentIdx + i + 2);
+        _IdxWritePtr += 3;
+    }
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
+}
 // - We intentionally avoid using ImVec2 and its math operators here to reduce cost to a minimum for debug/non-inlined builds.
 // - Filled shapes must always use clockwise winding order. The anti-aliasing fringe depends on it. Counter-clockwise shapes will have "inward" anti-aliasing.
 void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_count, ImU32 col)
@@ -1398,6 +2141,34 @@ void ImDrawList::AddLine(const ImVec2& p1, const ImVec2& p2, ImU32 col, float th
     PathLineTo(p1 + ImVec2(0.5f, 0.5f));
     PathLineTo(p2 + ImVec2(0.5f, 0.5f));
     PathStroke(col, 0, thickness);
+}
+
+void ImDrawList::AddLineDashed(const ImVec2& a, const ImVec2& b, ImU32 col, float thickness, unsigned int num_segments, unsigned int on_segments, unsigned int off_segments)
+{
+    if ((col >> 24) == 0)
+        return;
+    int on = 0, off = 0;
+    ImVec2 dir = (b - a) / num_segments;
+    for (int i = 0; i <= num_segments; i++)
+    {
+        ImVec2 point(a + dir * i);
+        if(on < on_segments) {
+            _Path.push_back(point);
+            on++;
+        } else if(on == on_segments && off == 0) {
+            _Path.push_back(point);
+            PathStroke(col, false, thickness);
+            off++;
+        } else if(on == on_segments && off < off_segments) {
+            off++;
+        } else {
+            _Path.resize(0);
+            _Path.push_back(point);
+            on=1;
+            off=0;
+        }
+    }
+    PathStroke(col, false, thickness);
 }
 
 // p_min = upper-left, p_max = lower-right
