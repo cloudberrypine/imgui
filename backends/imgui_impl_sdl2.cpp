@@ -431,6 +431,26 @@ bool ImGui_ImplSDL2_ProcessEvent(const SDL_Event* event)
                 }
             return true;
         }
+        case SDL_MULTIGESTURE: {
+            
+                io.hasGesture = true;
+                io.GestureCenter = ImVec2(event->mgesture.x * ImGui::GetMainViewport()->Size.x, event->mgesture.y * ImGui::GetMainViewport()->Size.y);
+                io.GestureZoomDelta = event->mgesture.dDist;
+                //printf("Xoom delta: %f\n", io.GestureZoomDelta);
+                /*
+                SDL_Log("Multi Gesture: x = %f, y = %f, dAng = %f, dR = %f",
+                        event->mgesture.x,
+                        event->mgesture.y,
+                        event->mgesture.dTheta,
+                        event->mgesture.dDist);
+                SDL_Log("MG: numDownTouch = %i",event->mgesture.numFingers);
+                 */
+            return true;
+        }
+        case SDL_FINGERUP: {
+            io.hasGesture = false;
+            return true;
+        }
     }
     return false;
 }
