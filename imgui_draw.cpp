@@ -2312,21 +2312,51 @@ void ImDrawList::AddCircleFilled(const ImVec2& center, float radius, ImU32 col, 
 
 void ImDrawList::AddCircleFilledFaded(const ImVec2& center, float radius, ImU32 col)
 {
-    ImDrawVert *firstVert = _VtxWritePtr;
-    // Use arc with automatic segment count
-    _PathArcToFastEx(center, radius, 0, IM_DRAWLIST_ARCFAST_SAMPLE_MAX, 0);
+    const ImVec2 uv = _Data->TexUvWhitePixel;
 
-    PathFill(col);
-
-    ImDrawVert *vert = _VtxWritePtr;
-
-    if (vert != firstVert) {
-        vert--;
-        while (vert > firstVert) {
-            vert->col = IM_COL32(0,0,0,0);
-            vert--;
-        }
+    constexpr int pointsCount = 16;
+    const int idx_count = (pointsCount - 1)*3;
+    const int vtx_count = pointsCount + 1;
+    PrimReserve(idx_count, vtx_count);
+    _VtxWritePtr->pos = center; _VtxWritePtr->uv = uv; _VtxWritePtr->col = col;
+    _VtxWritePtr++;
+    static ImVec2 offsets[pointsCount] = {
+            ImVec2(ImCos(0),                               ImSin(0)),
+            ImVec2(ImCos(1.0f/pointsCount * M_PI * 2.0f),  ImSin(1.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(2.0f/pointsCount * M_PI * 2.0f),  ImSin(2.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(3.0f/pointsCount * M_PI * 2.0f),  ImSin(3.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(4.0f/pointsCount * M_PI * 2.0f),  ImSin(4.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(5.0f/pointsCount * M_PI * 2.0f),  ImSin(5.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(6.0f/pointsCount * M_PI * 2.0f),  ImSin(6.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(7.0f/pointsCount * M_PI * 2.0f),  ImSin(7.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(8.0f/pointsCount * M_PI * 2.0f),  ImSin(8.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(9.0f/pointsCount * M_PI * 2.0f),  ImSin(9.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(10.0f/pointsCount * M_PI * 2.0f), ImSin(10.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(11.0f/pointsCount * M_PI * 2.0f), ImSin(11.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(12.0f/pointsCount * M_PI * 2.0f), ImSin(12.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(13.0f/pointsCount * M_PI * 2.0f), ImSin(13.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(14.0f/pointsCount * M_PI * 2.0f), ImSin(14.0f/pointsCount * M_PI * 2.0f)),
+            ImVec2(ImCos(15.0f/pointsCount * M_PI * 2.0f), ImSin(15.0f/pointsCount * M_PI * 2.0f))
+    };
+    for (int i = 0; i < pointsCount; i++)
+    {
+        _VtxWritePtr->pos = center + offsets[i] * radius; _VtxWritePtr->uv = uv; _VtxWritePtr->col = IM_COL32(0,0,0,0);
+        _VtxWritePtr++;
     }
+    for (int i = 2; i < pointsCount; i++) {
+
+        _IdxWritePtr[0] = (ImDrawIdx)(_VtxCurrentIdx);
+        _IdxWritePtr[1] = (ImDrawIdx)(_VtxCurrentIdx + i - 1);
+        _IdxWritePtr[2] = (ImDrawIdx)(_VtxCurrentIdx + i);
+        _IdxWritePtr += 3;
+    }
+    _IdxWritePtr[0] = (ImDrawIdx)(_VtxCurrentIdx);
+    _IdxWritePtr[1] = (ImDrawIdx)(_VtxCurrentIdx + pointsCount - 1);
+    _IdxWritePtr[2] = (ImDrawIdx)(_VtxCurrentIdx + 1);
+    _IdxWritePtr += 3;
+
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
 
 }
 
