@@ -2310,6 +2310,26 @@ void ImDrawList::AddCircleFilled(const ImVec2& center, float radius, ImU32 col, 
     PathFillConvex(col);
 }
 
+void ImDrawList::AddCircleFilledFaded(const ImVec2& center, float radius, ImU32 col)
+{
+    ImDrawVert *firstVert = _VtxWritePtr;
+    // Use arc with automatic segment count
+    _PathArcToFastEx(center, radius, 0, IM_DRAWLIST_ARCFAST_SAMPLE_MAX, 0);
+
+    PathFill(col);
+
+    ImDrawVert *vert = _VtxWritePtr;
+
+    if (vert != firstVert) {
+        vert--;
+        while (vert > firstVert) {
+            vert->col = IM_COL32(0,0,0,0);
+            vert--;
+        }
+    }
+
+}
+
 // Guaranteed to honor 'num_segments'
 void ImDrawList::AddNgon(const ImVec2& center, float radius, ImU32 col, int num_segments, float thickness)
 {
