@@ -2320,23 +2320,24 @@ void ImDrawList::AddCircleFilledFaded(const ImVec2& center, float radius, ImU32 
     PrimReserve(idx_count, vtx_count);
     _VtxWritePtr->pos = center; _VtxWritePtr->uv = uv; _VtxWritePtr->col = col;
     _VtxWritePtr++;
+
     static ImVec2 offsets[pointsCount] = {
             ImVec2(ImCos(0),                               ImSin(0)),
-            ImVec2(ImCos(1.0f/pointsCount * M_PI * 2.0f),  ImSin(1.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(2.0f/pointsCount * M_PI * 2.0f),  ImSin(2.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(3.0f/pointsCount * M_PI * 2.0f),  ImSin(3.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(4.0f/pointsCount * M_PI * 2.0f),  ImSin(4.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(5.0f/pointsCount * M_PI * 2.0f),  ImSin(5.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(6.0f/pointsCount * M_PI * 2.0f),  ImSin(6.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(7.0f/pointsCount * M_PI * 2.0f),  ImSin(7.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(8.0f/pointsCount * M_PI * 2.0f),  ImSin(8.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(9.0f/pointsCount * M_PI * 2.0f),  ImSin(9.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(10.0f/pointsCount * M_PI * 2.0f), ImSin(10.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(11.0f/pointsCount * M_PI * 2.0f), ImSin(11.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(12.0f/pointsCount * M_PI * 2.0f), ImSin(12.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(13.0f/pointsCount * M_PI * 2.0f), ImSin(13.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(14.0f/pointsCount * M_PI * 2.0f), ImSin(14.0f/pointsCount * M_PI * 2.0f)),
-            ImVec2(ImCos(15.0f/pointsCount * M_PI * 2.0f), ImSin(15.0f/pointsCount * M_PI * 2.0f))
+            ImVec2(ImCos(1.0f/pointsCount * IM_PI * 2.0f),  ImSin(1.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(2.0f/pointsCount * IM_PI * 2.0f),  ImSin(2.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(3.0f/pointsCount * IM_PI * 2.0f),  ImSin(3.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(4.0f/pointsCount * IM_PI * 2.0f),  ImSin(4.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(5.0f/pointsCount * IM_PI * 2.0f),  ImSin(5.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(6.0f/pointsCount * IM_PI * 2.0f),  ImSin(6.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(7.0f/pointsCount * IM_PI * 2.0f),  ImSin(7.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(8.0f/pointsCount * IM_PI * 2.0f),  ImSin(8.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(9.0f/pointsCount * IM_PI * 2.0f),  ImSin(9.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(10.0f/pointsCount * IM_PI * 2.0f), ImSin(10.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(11.0f/pointsCount * IM_PI * 2.0f), ImSin(11.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(12.0f/pointsCount * IM_PI * 2.0f), ImSin(12.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(13.0f/pointsCount * IM_PI * 2.0f), ImSin(13.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(14.0f/pointsCount * IM_PI * 2.0f), ImSin(14.0f/pointsCount * IM_PI * 2.0f)),
+            ImVec2(ImCos(15.0f/pointsCount * IM_PI * 2.0f), ImSin(15.0f/pointsCount * IM_PI * 2.0f))
     };
     for (int i = 0; i < pointsCount; i++)
     {
