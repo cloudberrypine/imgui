@@ -1711,6 +1711,40 @@ void ImDrawList::AddPolyFilled(const ImVec2* points, const int points_count, ImU
     _VtxCurrentIdx += (ImDrawIdx)vtx_count;
 
 }
+
+void ImDrawList::AddQuadStripMultiColoredFilled(const ImVec2* points, const int points_count, const ImU32* colors)
+{
+    // 4 points, 6 indices, 1 quads
+    // 6 points, 12 indices, 2 quads
+    // 8 points, 18 indices, 3 quads
+    const int vtx_count = points_count;
+    int quad_count = (points_count - 2) / 2;
+    const int idx_count = quad_count * 6;
+    PrimReserve(idx_count, vtx_count);
+
+    int vertexStartIndex = _VtxCurrentIdx;
+
+    const ImVec2 uv = _Data->TexUvWhitePixel;
+    for (int i = 0; i < vtx_count; i++) {
+        ImDrawVert &v = *_VtxWritePtr;
+        v.pos = points[i];
+        v.col = colors[i];
+        v.uv = uv;
+        _VtxWritePtr++;
+    }
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
+    for (int i = 0; i < quad_count; i++) {
+        _IdxWritePtr[0] = vertexStartIndex + i * 2;
+        _IdxWritePtr[1] = vertexStartIndex + i * 2 + 1;
+        _IdxWritePtr[2] = vertexStartIndex + i * 2 + 2;
+        _IdxWritePtr[3] = vertexStartIndex + i * 2 + 2;
+        _IdxWritePtr[4] = vertexStartIndex + i * 2 + 1;
+        _IdxWritePtr[5] = vertexStartIndex + i * 2 + 3;
+        _IdxWritePtr += 6;
+    }
+}
+
 // - We intentionally avoid using ImVec2 and its math operators here to reduce cost to a minimum for debug/non-inlined builds.
 // - Filled shapes must always use clockwise winding order. The anti-aliasing fringe depends on it. Counter-clockwise shapes will have "inward" anti-aliasing.
 void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_count, ImU32 col)

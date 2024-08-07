@@ -2865,6 +2865,7 @@ struct ImDrawList
     IMGUI_API void  AddPolylineImprovedMultiWidth(const ImVec2* points, int num_points, const float *widths, const ImU32 *colors1, const ImU32 *colors2, bool closed, float thickness, ImU32 transparencyMask = ~IM_COL32_A_MASK);
     IMGUI_API void  AddPolylineMultiColored(const ImVec2* points, const int points_count, const ImU32* colors, bool closed, float thickness, ImU32 transparencyMask = ~IM_COL32_A_MASK);
     IMGUI_API void  AddPolyFilled(const ImVec2* points, int num_points, ImU32 col); // Note: Anti-aliased filling requires points to be in clockwise order.
+    IMGUI_API void  AddQuadStripMultiColoredFilled(const ImVec2* points, const int points_count, const ImU32* colors);
     IMGUI_API void  AddConvexPolyFilled(const ImVec2* points, int num_points, ImU32 col);
     IMGUI_API void  AddBezierCubic(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col, float thickness, int num_segments = 0); // Cubic Bezier (4 control points)
     IMGUI_API void  AddBezierQuadratic(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col, float thickness, int num_segments = 0);               // Quadratic Bezier (3 control points)
@@ -2887,6 +2888,7 @@ struct ImDrawList
     inline    void  PathFillConvex(ImU32 col)                                   { AddConvexPolyFilled(_Path.Data, _Path.Size, col); _Path.Size = 0; }  // Note: Anti-aliased filling requires points to be in clockwise order.
     inline    void  PathFill(ImU32 col)                                         { AddPolyFilled(_Path.Data, _Path.Size, col); _Path.Size = 0; }
     inline    void  PathStroke(ImU32 col, ImDrawFlags flags = 0, float thickness = 1.0f) { AddPolyline(_Path.Data, _Path.Size, col, flags, thickness); _Path.Size = 0; }
+    inline    void  PathFillMultiColoredQuadStrip() { AddQuadStripMultiColoredFilled(_Path.Data, _Path.Size, _PathColors.Data); _Path.Size = 0; _PathColors.Size = 0; }
 
     inline    void  PathStrokeImproved(ImU32 col, bool closed, float thickness = 1.0f, ImU32 transparencyMask = ~IM_COL32_A_MASK)  { AddPolylineImproved(_Path.Data, _Path.Size, col, closed, thickness, transparencyMask); _Path.Size = 0; }
     inline    void  PathStrokeImprovedMultiWidth(bool closed, float thickness = 1.0f, ImU32 transparencyMask = ~IM_COL32_A_MASK)  { AddPolylineImprovedMultiWidth(_Path.Data, _Path.Size, _PathWidths.Data, _PathColors.Data, _AdditionalPathColors.Data, closed, thickness, transparencyMask); _Path.Size = 0; _PathWidths.Size = 0; _PathColors.Size = 0; _AdditionalPathColors.Size = 0; }
