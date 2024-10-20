@@ -2822,6 +2822,19 @@ struct ImDrawList
     ImDrawListSplitter      _Splitter;          // [Internal] for channels api (note: prefer using your own persistent instance of ImDrawListSplitter!)
     float                   _FringeScale;       // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content
 
+
+    struct TextColorRange {
+        int startIndex;
+        int endIndex;
+        ImU32 color;
+        // These are set in the ImGui::Text function
+        // to let the caller track bounds of text ranges
+        ImVec2 rect1Min;
+        ImVec2 rect1Max;
+        ImVec2 rect2Min;
+        ImVec2 rect2Max;
+    };
+    ImVector<TextColorRange> textColorRanges;
     // If you want to create ImDrawList instances, pass them ImGui::GetDrawListSharedData() or create and use your own ImDrawListSharedData (so you can use ImDrawList without ImGui)
     ImDrawList(ImDrawListSharedData* shared_data) { memset(this, 0, sizeof(*this)); _Data = shared_data; }
 

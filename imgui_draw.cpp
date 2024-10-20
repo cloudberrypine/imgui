@@ -4569,6 +4569,8 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
     const float line_height = FontSize * scale;
     const bool word_wrap_enabled = (wrap_width > 0.0f);
 
+    int nextTextColorIndex = draw_list->textColorRanges.size() > 0 ? 0 :                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         -1;
+
     // Fast-forward to first visible line
     const char* s = text_begin;
     if (y + line_height < clip_rect.y)
@@ -4636,6 +4638,7 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
                 continue;
             }
         }
+        auto currentCharI = s - text_begin;
 
         // Decode and advance source
         unsigned int c = (unsigned int)*s;
@@ -4714,6 +4717,40 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
 
                 // Support for untinted glyphs
                 ImU32 glyph_col = glyph->Colored ? col_untinted : col;
+                if (nextTextColorIndex != -1 && nextTextColorIndex < draw_list->textColorRanges.size()) {
+                    ImDrawList::TextColorRange &textColorRange = draw_list->textColorRanges[nextTextColorIndex];
+                    if (currentCharI > textColorRange.endIndex) {
+                        nextTextColorIndex++;
+                    } else if (currentCharI >= textColorRange.startIndex) {
+                        glyph_col = textColorRange.color;
+                        if (textColorRange.rect1Min.x == FLT_MAX) {
+                            textColorRange.rect1Min.x = x1;
+                            textColorRange.rect1Min.y = y1;
+                            textColorRange.rect1Max.x = x2;
+                            textColorRange.rect1Max.y = y2;
+                        } else {
+                            if (textColorRange.rect2Min.x == FLT_MAX) {
+                                if (x1 >= textColorRange.rect1Max.x) {
+                                    textColorRange.rect1Max.x = x2;
+                                    textColorRange.rect1Min.y = ImMin(textColorRange.rect1Min.y, y1);
+                                    textColorRange.rect1Max.y = ImMax(textColorRange.rect1Max.y, y2);
+                                } else {
+                                    textColorRange.rect2Min.x = x1;
+                                    textColorRange.rect2Min.y = y1;
+                                    textColorRange.rect2Max.x = x2;
+                                    textColorRange.rect2Max.y = y2;
+                                }
+                            } else {
+                                textColorRange.rect2Max.x = x2;
+                                textColorRange.rect2Min.y = ImMin(textColorRange.rect2Min.y, y1);
+                                textColorRange.rect2Max.y = ImMax(textColorRange.rect2Max.y, y2);
+                            }
+                        }
+                    }
+
+
+
+                }
 
                 // We are NOT calling PrimRectUV() here because non-inlined causes too much overhead in a debug builds. Inlined here:
                 {
