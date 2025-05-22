@@ -3734,7 +3734,7 @@ static void    STB_TEXTEDIT_LAYOUTROW(StbTexteditRow* r, ImGuiInputTextState* ob
 
 static bool is_separator(unsigned int c)
 {
-    return c==',' || c==';' || c=='(' || c==')' || c=='{' || c=='}' || c=='[' || c==']' || c=='|' || c=='\n' || c=='\r' || c=='.' || c=='!';
+    return c==',' || c==';' || c=='(' || c==')' || c=='{' || c=='}' || c=='[' || c==']' || c=='|' || c=='\n' || c=='\r' || c=='.' || c=='!' || c==' ';
 }
 
 static int is_word_boundary_from_right(ImGuiInputTextState* obj, int idx)
@@ -4369,7 +4369,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
                 //state->OnKeyPressed(STB_TEXTEDIT_K_WORDRIGHT | STB_TEXTEDIT_K_SHIFT);
                 if (!STB_TEXT_HAS_SELECTION(&state->Stb))
                     ImStb::stb_textedit_prep_selection_at_cursor(&state->Stb);
-                state->Stb.cursor = ImStb::STB_TEXTEDIT_MOVEWORDRIGHT_MAC(state, state->Stb.cursor);
+                state->Stb.cursor = ImStb::STB_TEXTEDIT_MOVEWORDRIGHT_WIN(state, state->Stb.cursor);
                 state->Stb.select_end = state->Stb.cursor;
                 ImStb::stb_textedit_clamp(state, &state->Stb);
             }
