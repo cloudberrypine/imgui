@@ -676,6 +676,13 @@ bool ImGui::ButtonBehavior(const ImRect& bb, ImGuiID id, bool* out_hovered, bool
     if (out_hovered) *out_hovered = hovered;
     if (out_held) *out_held = held;
 
+    if (flags & ImGuiButtonFlags_NoDrag) {
+        ImGuiIO &io = ImGui::GetIO();
+        if (io.MouseDragMaxDistanceSqr[0] > io.MouseDragThreshold * io.MouseDragThreshold) {
+            pressed = false;
+        }
+    }
+
     return pressed;
 }
 
