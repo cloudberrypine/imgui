@@ -11030,6 +11030,7 @@ bool ImGui::BeginItemTooltip()
 bool ImGui::BeginTooltipEx(ImGuiTooltipFlags tooltip_flags, ImGuiWindowFlags extra_window_flags)
 {
     ImGuiContext& g = *GImGui;
+    ImGui::GetIO().allowTouchHover = true;
 
     if (g.DragDropWithinSource || g.DragDropWithinTarget)
     {

@@ -374,9 +374,10 @@ bool ImGui_ImplSDL2_ProcessEvent(const SDL_Event* event)
             io.AddMouseSourceEvent(event->button.which == SDL_TOUCH_MOUSEID ? ImGuiMouseSource_TouchScreen : ImGuiMouseSource_Mouse);
             io.AddMouseButtonEvent(mouse_button, (event->type == SDL_MOUSEBUTTONDOWN));
             bd->MouseButtonsDown = (event->type == SDL_MOUSEBUTTONDOWN) ? (bd->MouseButtonsDown | (1 << mouse_button)) : (bd->MouseButtonsDown & ~(1 << mouse_button));
-            
-            bool isTouchScreen = ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_IsTouchScreen;
-            if (isTouchScreen) {
+
+            ImGuiIO &io = ImGui::GetIO();
+            bool isTouchScreen = io.ConfigFlags & ImGuiConfigFlags_IsTouchScreen;
+            if (isTouchScreen && !io.allowTouchHover) {
                 bd->PendingMouseLeaveFrame = ImGui::GetFrameCount() + 1;
             }
             return true;
