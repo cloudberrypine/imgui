@@ -794,6 +794,15 @@ void ImGui_ImplSDL2_NewFrame()
     ImGui_ImplSDL2_Data* bd = ImGui_ImplSDL2_GetBackendData();
     IM_ASSERT(bd != nullptr && "Did you call ImGui_ImplSDL2_Init()?");
     ImGuiIO& io = ImGui::GetIO();
+    
+    bool isTouchScreen = io.ConfigFlags & ImGuiConfigFlags_IsTouchScreen;
+    if (isTouchScreen && io.WantTextInput) {
+        SDL_StartTextInput();
+    }
+    
+    if (isTouchScreen && SDL_IsTextInputActive() && !io.WantCaptureKeyboard) {
+        SDL_StopTextInput();
+    }
 
     // Setup display size (every frame to accommodate for window resizing)
     int w, h;
