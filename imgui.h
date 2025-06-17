@@ -2241,6 +2241,7 @@ struct ImGuiIO
     ImVec2 GestureCenter;
     float GestureZoomDelta;
     bool allowTouchHover;
+    float defaultDpiScale;                          // Hacked in here to be used for scroll bar insets
 
     // Legacy: before 1.87, we required backend to fill io.KeyMap[] (imgui->native map) during initialization and io.KeysDown[] (native indices) every frame.
     // This is still temporarily supported as a legacy feature. However the new preferred scheme is for backend to call io.AddKeyEvent().

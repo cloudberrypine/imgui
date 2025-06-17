@@ -1319,6 +1319,9 @@ ImGuiIO::ImGuiIO()
     ConfigViewportsNoDecoration = true;
     ConfigViewportsNoDefaultParent = false;
 
+    defaultDpiScale = 1;
+    allowTouchHover = false;
+
     // Miscellaneous options
     MouseDrawCursor = false;
 #ifdef __APPLE__
