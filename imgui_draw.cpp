@@ -1138,6 +1138,72 @@ void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_coun
     }
 }
 
+void ImDrawList::AddQuadStripFilled(const ImVec2* points, const int points_count, const ImU32 color)
+{
+    // 4 points, 6 indices, 1 quads
+    // 6 points, 12 indices, 2 quads
+    // 8 points, 18 indices, 3 quads
+    const int vtx_count = points_count;
+    int quad_count = (points_count - 2) / 2;
+    const int idx_count = quad_count * 6;
+    PrimReserve(idx_count, vtx_count);
+
+    int vertexStartIndex = _VtxCurrentIdx;
+
+    const ImVec2 uv = _Data->TexUvWhitePixel;
+    for (int i = 0; i < vtx_count; i++) {
+        ImDrawVert &v = *_VtxWritePtr;
+        v.pos = points[i];
+        v.col = color;
+        v.uv = uv;
+        _VtxWritePtr++;
+    }
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
+    for (int i = 0; i < quad_count; i++) {
+        _IdxWritePtr[0] = vertexStartIndex + i * 2;
+        _IdxWritePtr[1] = vertexStartIndex + i * 2 + 1;
+        _IdxWritePtr[2] = vertexStartIndex + i * 2 + 2;
+        _IdxWritePtr[3] = vertexStartIndex + i * 2 + 2;
+        _IdxWritePtr[4] = vertexStartIndex + i * 2 + 1;
+        _IdxWritePtr[5] = vertexStartIndex + i * 2 + 3;
+        _IdxWritePtr += 6;
+    }
+}
+
+void ImDrawList::AddQuadStripFilledMultiColored(const ImVec2* points, const int points_count, const ImU32* colors)
+{
+    // 4 points, 6 indices, 1 quads
+    // 6 points, 12 indices, 2 quads
+    // 8 points, 18 indices, 3 quads
+    const int vtx_count = points_count;
+    int quad_count = (points_count - 2) / 2;
+    const int idx_count = quad_count * 6;
+    PrimReserve(idx_count, vtx_count);
+
+    int vertexStartIndex = _VtxCurrentIdx;
+
+    const ImVec2 uv = _Data->TexUvWhitePixel;
+    for (int i = 0; i < vtx_count; i++) {
+        ImDrawVert &v = *_VtxWritePtr;
+        v.pos = points[i];
+        v.col = colors[i];
+        v.uv = uv;
+        _VtxWritePtr++;
+    }
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
+    for (int i = 0; i < quad_count; i++) {
+        _IdxWritePtr[0] = vertexStartIndex + i * 2;
+        _IdxWritePtr[1] = vertexStartIndex + i * 2 + 1;
+        _IdxWritePtr[2] = vertexStartIndex + i * 2 + 2;
+        _IdxWritePtr[3] = vertexStartIndex + i * 2 + 2;
+        _IdxWritePtr[4] = vertexStartIndex + i * 2 + 1;
+        _IdxWritePtr[5] = vertexStartIndex + i * 2 + 3;
+        _IdxWritePtr += 6;
+    }
+}
+
 void ImDrawList::_PathArcToFastEx(const ImVec2& center, float radius, int a_min_sample, int a_max_sample, int a_step)
 {
     if (radius < 0.5f)
