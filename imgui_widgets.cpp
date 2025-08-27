@@ -6817,10 +6817,12 @@ bool ImGui::TreeNodeBehavior(ImGuiID id, ImGuiTreeNodeFlags flags, const char* l
         else if (pressed && g.DragDropHoldJustPressedId == id)
         {
             IM_ASSERT(button_flags & ImGuiButtonFlags_PressedOnDragDropHold);
-            if (!is_open) // When using Drag and Drop "hold to open" we keep the node highlighted after opening, but never close it again.
-                toggled = true;
-            else
+            if (!is_open) {
+                // When using Drag and Drop "hold to open" we keep the node highlighted after opening, but never close it again.
+                // toggled = true;
+            } else {
                 pressed = false; // Cancel press so it doesn't trigger selection.
+            }
         }
 
         if (g.NavId == id && g.NavMoveDir == ImGuiDir_Left && is_open)
