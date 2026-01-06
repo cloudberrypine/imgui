@@ -462,7 +462,11 @@ void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset, double yo
     // Ignore GLFW events: will be processed in ImGui_ImplEmscripten_WheelCallback().
     return;
 #endif
-
+#ifdef __APPLE__
+    // TODO: Is there a better way of handling this?
+    xoffset /= 3.0f;
+    yoffset /= 3.0f;
+#endif
     ImGuiIO& io = ImGui::GetIO(bd->Context);
     io.AddMouseWheelEvent((float)xoffset, (float)yoffset);
 }
