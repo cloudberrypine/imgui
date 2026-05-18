@@ -469,6 +469,9 @@ void ImDrawList::_ResetForNewFrame()
     _TextureStack.resize(0);
     _CallbacksDataBuf.resize(0);
     _Path.resize(0);
+    _PathColors.resize(0);
+    _AdditionalPathColors.resize(0);
+    _PathWidths.resize(0);
     _Splitter.Clear();
     CmdBuffer.push_back(ImDrawCmd());
     _FringeScale = _Data->InitialFringeScale;
@@ -487,6 +490,9 @@ void ImDrawList::_ClearFreeMemory()
     _TextureStack.clear();
     _CallbacksDataBuf.clear();
     _Path.clear();
+    _PathColors.clear();
+    _AdditionalPathColors.clear();
+    _PathWidths.clear();
     _Splitter.ClearFreeMemory();
 }
 
@@ -1060,6 +1066,83 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
             _VtxCurrentIdx += 4;
         }
     }
+}
+
+void ImDrawList::AddPolylineImprovedMultiWidth(const ImVec2* points, const int points_count, const float* widths, const ImU32* colors1, const ImU32* colors2, bool closed, float thickness, ImU32 transparency_mask)
+{
+    if (points_count < 2 || widths == NULL || colors1 == NULL || colors2 == NULL)
+        return;
+
+    const int count = closed ? points_count : points_count - 1;
+    const float aa_size = _FringeScale;
+    const ImVec2 opaque_uv = _Data->TexUvWhitePixel;
+    const int vtx_count = points_count * 4;
+    const int idx_count = count * 18;
+    PrimReserve(idx_count, vtx_count);
+
+    _Data->TempBuffer.reserve_discard(points_count);
+    ImVec2* normals = _Data->TempBuffer.Data;
+    for (int i = 0; i < count; ++i)
+    {
+        const int i2 = (i + 1) == points_count ? 0 : i + 1;
+        float dx = points[i2].x - points[i].x;
+        float dy = points[i2].y - points[i].y;
+        IM_NORMALIZE2F_OVER_ZERO(dx, dy);
+        normals[i].x = dy;
+        normals[i].y = -dx;
+    }
+    if (!closed)
+        normals[points_count - 1] = normals[points_count - 2];
+
+    const ImDrawIdx start_idx = (ImDrawIdx)_VtxCurrentIdx;
+    for (int i = 0; i < points_count; ++i)
+    {
+        ImVec2 normal;
+        if (closed || (i > 0 && i < points_count - 1))
+        {
+            const int prev = (i == 0) ? points_count - 1 : i - 1;
+            normal.x = (normals[prev].x + normals[i].x) * 0.5f;
+            normal.y = (normals[prev].y + normals[i].y) * 0.5f;
+            IM_NORMALIZE2F_OVER_ZERO(normal.x, normal.y);
+        }
+        else
+        {
+            normal = normals[i == 0 ? 0 : i - 1];
+        }
+
+        const float half_width = ImMax(widths[i] * thickness, 0.0f) * 0.5f;
+        const float outer_width = half_width + aa_size;
+        const ImU32 col_trans1 = colors1[i] & transparency_mask;
+        const ImU32 col_trans2 = colors2[i] & transparency_mask;
+        _VtxWritePtr[0].pos = ImVec2(points[i].x - normal.x * outer_width, points[i].y - normal.y * outer_width);
+        _VtxWritePtr[0].uv = opaque_uv;
+        _VtxWritePtr[0].col = col_trans1;
+        _VtxWritePtr[1].pos = ImVec2(points[i].x - normal.x * half_width, points[i].y - normal.y * half_width);
+        _VtxWritePtr[1].uv = opaque_uv;
+        _VtxWritePtr[1].col = colors1[i];
+        _VtxWritePtr[2].pos = ImVec2(points[i].x + normal.x * half_width, points[i].y + normal.y * half_width);
+        _VtxWritePtr[2].uv = opaque_uv;
+        _VtxWritePtr[2].col = colors2[i];
+        _VtxWritePtr[3].pos = ImVec2(points[i].x + normal.x * outer_width, points[i].y + normal.y * outer_width);
+        _VtxWritePtr[3].uv = opaque_uv;
+        _VtxWritePtr[3].col = col_trans2;
+        _VtxWritePtr += 4;
+    }
+
+    for (int i = 0; i < count; ++i)
+    {
+        const int i2 = (i + 1) == points_count ? 0 : i + 1;
+        const ImDrawIdx a = (ImDrawIdx)(start_idx + i * 4);
+        const ImDrawIdx b = (ImDrawIdx)(start_idx + i2 * 4);
+        _IdxWritePtr[0] = a + 0; _IdxWritePtr[1] = b + 0; _IdxWritePtr[2] = b + 1;
+        _IdxWritePtr[3] = a + 0; _IdxWritePtr[4] = b + 1; _IdxWritePtr[5] = a + 1;
+        _IdxWritePtr[6] = a + 1; _IdxWritePtr[7] = b + 1; _IdxWritePtr[8] = b + 2;
+        _IdxWritePtr[9] = a + 1; _IdxWritePtr[10] = b + 2; _IdxWritePtr[11] = a + 2;
+        _IdxWritePtr[12] = a + 2; _IdxWritePtr[13] = b + 2; _IdxWritePtr[14] = b + 3;
+        _IdxWritePtr[15] = a + 2; _IdxWritePtr[16] = b + 3; _IdxWritePtr[17] = a + 3;
+        _IdxWritePtr += 18;
+    }
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
 }
 
 // - We intentionally avoid using ImVec2 and its math operators here to reduce cost to a minimum for debug/non-inlined builds.
@@ -1725,6 +1808,40 @@ void ImDrawList::AddCircleFilled(const ImVec2& center, float radius, ImU32 col, 
     }
 
     PathFillConvex(col);
+}
+
+void ImDrawList::AddCircleFilledFaded(const ImVec2& center, float radius, ImU32 col)
+{
+    if ((col & IM_COL32_A_MASK) == 0 || radius < 0.5f)
+        return;
+
+    constexpr int points_count = 24;
+    const ImVec2 uv = _Data->TexUvWhitePixel;
+    const int idx_count = points_count * 3;
+    const int vtx_count = points_count + 1;
+    PrimReserve(idx_count, vtx_count);
+
+    const ImDrawIdx start_idx = (ImDrawIdx)_VtxCurrentIdx;
+    _VtxWritePtr->pos = center;
+    _VtxWritePtr->uv = uv;
+    _VtxWritePtr->col = col;
+    _VtxWritePtr++;
+    for (int i = 0; i < points_count; ++i)
+    {
+        const float a = (float)i / (float)points_count * IM_PI * 2.0f;
+        _VtxWritePtr->pos = ImVec2(center.x + ImCos(a) * radius, center.y + ImSin(a) * radius);
+        _VtxWritePtr->uv = uv;
+        _VtxWritePtr->col = col & ~IM_COL32_A_MASK;
+        _VtxWritePtr++;
+    }
+    for (int i = 0; i < points_count; ++i)
+    {
+        _IdxWritePtr[0] = start_idx;
+        _IdxWritePtr[1] = (ImDrawIdx)(start_idx + 1 + i);
+        _IdxWritePtr[2] = (ImDrawIdx)(start_idx + 1 + ((i + 1) % points_count));
+        _IdxWritePtr += 3;
+    }
+    _VtxCurrentIdx += (ImDrawIdx)vtx_count;
 }
 
 // Guaranteed to honor 'num_segments'

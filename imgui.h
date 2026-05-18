@@ -3390,6 +3390,8 @@ struct ImDrawList
     ImDrawIdx*              _IdxWritePtr;       // [Internal] point within IdxBuffer.Data after each add command (to avoid using the ImVector<> operators too much)
     ImVector<ImVec2>        _Path;              // [Internal] current path building
     ImVector<ImU32>         _PathColors;        // [Internal] current path building
+    ImVector<ImU32>         _AdditionalPathColors; // [Internal] current path building
+    ImVector<float>         _PathWidths;        // [Internal] current path building
     ImDrawCmdHeader         _CmdHeader;         // [Internal] template of active commands. Fields should match those of CmdBuffer.back().
     ImDrawListSplitter      _Splitter;          // [Internal] for channels api (note: prefer using your own persistent instance of ImDrawListSplitter!)
     ImVector<ImVec4>        _ClipRectStack;     // [Internal]
@@ -3429,6 +3431,7 @@ struct ImDrawList
     IMGUI_API void  AddTriangleFilled(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col);
     IMGUI_API void  AddCircle(const ImVec2& center, float radius, ImU32 col, int num_segments = 0, float thickness = 1.0f);
     IMGUI_API void  AddCircleFilled(const ImVec2& center, float radius, ImU32 col, int num_segments = 0);
+    IMGUI_API void  AddCircleFilledFaded(const ImVec2& center, float radius, ImU32 col);
     IMGUI_API void  AddNgon(const ImVec2& center, float radius, ImU32 col, int num_segments, float thickness = 1.0f);
     IMGUI_API void  AddNgonFilled(const ImVec2& center, float radius, ImU32 col, int num_segments);
     IMGUI_API void  AddEllipse(const ImVec2& center, const ImVec2& radius, ImU32 col, float rot = 0.0f, int num_segments = 0, float thickness = 1.0f);
@@ -3442,6 +3445,7 @@ struct ImDrawList
     // - Only simple polygons are supported by filling functions (no self-intersections, no holes).
     // - Concave polygon fill is more expensive than convex one: it has O(N^2) complexity. Provided as a convenience for the user but not used by the main library.
     IMGUI_API void  AddPolyline(const ImVec2* points, int num_points, ImU32 col, ImDrawFlags flags, float thickness);
+    IMGUI_API void  AddPolylineImprovedMultiWidth(const ImVec2* points, int num_points, const float* widths, const ImU32* colors1, const ImU32* colors2, bool closed, float thickness = 1.0f, ImU32 transparency_mask = ~IM_COL32_A_MASK);
     IMGUI_API void  AddConvexPolyFilled(const ImVec2* points, int num_points, ImU32 col);
     IMGUI_API void  AddConcavePolyFilled(const ImVec2* points, int num_points, ImU32 col);
 
@@ -3462,10 +3466,12 @@ struct ImDrawList
     inline    void  PathClear()                                                 { _Path.Size = 0; }
     inline    void  PathLineTo(const ImVec2& pos)                               { _Path.push_back(pos); }
     inline    void  PathLineTo(const ImVec2& pos, ImU32 color)                               { _Path.push_back(pos); _PathColors.push_back(color); }
+    inline    void  PathLineTo(const ImVec2& pos, float width, ImU32 col1, ImU32 col2) { _Path.push_back(pos); _PathWidths.push_back(width); _PathColors.push_back(col1); _AdditionalPathColors.push_back(col2); }
     inline    void  PathLineToMergeDuplicate(const ImVec2& pos)                 { if (_Path.Size == 0 || memcmp(&_Path.Data[_Path.Size - 1], &pos, 8) != 0) _Path.push_back(pos); }
     inline    void  PathFillConvex(ImU32 col)                                   { AddConvexPolyFilled(_Path.Data, _Path.Size, col); _Path.Size = 0; }
     inline    void  PathFillConcave(ImU32 col)                                  { AddConcavePolyFilled(_Path.Data, _Path.Size, col); _Path.Size = 0; }
     inline    void  PathStroke(ImU32 col, ImDrawFlags flags = 0, float thickness = 1.0f) { AddPolyline(_Path.Data, _Path.Size, col, flags, thickness); _Path.Size = 0; }
+    inline    void  PathStrokeImprovedMultiWidth(bool closed, float thickness = 1.0f, ImU32 transparency_mask = ~IM_COL32_A_MASK) { AddPolylineImprovedMultiWidth(_Path.Data, _Path.Size, _PathWidths.Data, _PathColors.Data, _AdditionalPathColors.Data, closed, thickness, transparency_mask); _Path.Size = 0; _PathWidths.Size = 0; _PathColors.Size = 0; _AdditionalPathColors.Size = 0; }
     inline    void  PathFillQuadStrip(ImU32 col) { AddQuadStripFilled(_Path.Data, _Path.Size, col); _Path.Size = 0; _PathColors.Size = 0; }
     inline    void  PathFillQuadStripMultiColored() { AddQuadStripFilledMultiColored(_Path.Data, _Path.Size, _PathColors.Data); _Path.Size = 0; _PathColors.Size = 0; }
     IMGUI_API void  PathArcTo(const ImVec2& center, float radius, float a_min, float a_max, int num_segments = 0);
